@@ -30,9 +30,17 @@ Do this:
       bash scripts/check-compat.sh
    Expect "OK: deploys to macOS 14.0 and later." Report the output to me.
 
-5. Run the tests:
-      swift test
-   Expect 67 passing. Report any failure instead of continuing past it.
+5. Run the tests, but only if full Xcode is present. XCTest does not ship with
+   the Command Line Tools, so `swift test` fails there with
+   `no such module 'XCTest'` — that is a missing toolchain, not a broken build,
+   so do not report it as a failure.
+      if [ -d /Applications/Xcode.app ]; then
+        DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
+      else
+        echo "Full Xcode not installed - skipping tests (the build above is the check)"
+      fi
+   If they do run, expect 67 passing. Report any real failure instead of
+   continuing past it.
 
 6. Install and launch:
       cp -R dist/Headroom.app /Applications/

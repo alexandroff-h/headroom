@@ -77,9 +77,17 @@ Readings identify likely causes; they do not prove the cause of every lag. Brief
 ## Development
 
 ```sh
-swift test                      # 67 tests, core logic only
 bash scripts/build-app.sh       # signed .app in dist/
 bash scripts/check-compat.sh    # asserts it still deploys to macOS 14
+swift test                      # 67 tests, core logic only
+```
+
+**Building needs only the Command Line Tools. Running the tests needs full
+Xcode**, because XCTest does not ship with the Command Line Tools — `swift test`
+fails there with `no such module 'XCTest'`. With Xcode installed:
+
+```sh
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
 ```
 
 `check-compat.sh` reads the Mach-O load command and the Info.plist, and lists every weak-linked SwiftUI entry point so a new one gets traced rather than assumed safe.
