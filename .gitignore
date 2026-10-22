@@ -1,0 +1,9 @@
+.build/
+.build-*/
+dist/
+.attic/
+.DS_Store
+*.xcuserstate
+output/
+.design-backup/
+.mocks/
