@@ -162,6 +162,24 @@ private struct WindowChrome: NSViewRepresentable {
         window.contentMinSize = NSSize(width: Metrics.minimumWidth, height: Metrics.minimumHeight)
         NSWindow.allowsAutomaticWindowTabbing = false
 
+        // SwiftUI's own autosave key embeds the view type's memory address, so
+        // it changes on every build: the preferences fill up with dozens of
+        // dead frame entries and the restored one is whichever build happened
+        // to write last. One stable name instead.
+        window.setFrameAutosaveName("HeadroomWindow")
+
+        // A restored frame can be taller than the display it comes back on, or
+        // sit off the bottom of it, and then the app launches to a window
+        // nobody can see. Bring it back onto the screen it is on.
+        if let visible = (window.screen ?? NSScreen.main)?.visibleFrame {
+            var frame = window.frame
+            frame.size.width = min(frame.width, visible.width)
+            frame.size.height = min(frame.height, visible.height)
+            frame.origin.x = min(max(frame.minX, visible.minX), visible.maxX - frame.width)
+            frame.origin.y = min(max(frame.minY, visible.minY), visible.maxY - frame.height)
+            if frame != window.frame { window.setFrame(frame, display: true) }
+        }
+
         // Capture affordances, for photographing the design without a pointer.
         // `HEADROOM_WINDOW=820x1560` opens a window taller than anyone would
         // use, so a whole scrolling column fits in one frame;
