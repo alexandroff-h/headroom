@@ -4,6 +4,17 @@ import HeadroomCore
 
 // MARK: - Buttons
 
+// Both styles below take the same shape as QuitButton: a capsule once the
+// system is drawing glass, the house radius before that. See Glass.swift.
+
+private var controlRadius: CGFloat { Liquid.isAvailable ? 16 : Radius.control }
+
+private var controlShape: AnyShape {
+    Liquid.isAvailable
+        ? AnyShape(Capsule())
+        : AnyShape(RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+}
+
 /// The one filled control on a screen: the thing to do. Press is expressed as
 /// a fill shift rather than a scale, so it lands identically whether it came
 /// from the pointer or from the space bar on a focused button.
@@ -16,17 +27,23 @@ struct ActionStyle: ButtonStyle {
         configuration.label
             .type(Face.row)
             .foregroundStyle(Ink.onAccent)
-            .padding(.horizontal, Space.m)
+            .padding(.horizontal, Liquid.isAvailable ? Space.l : Space.m)
             .frame(height: 32)
-            .contentShape(RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+            .contentShape(controlShape)
             .background {
-                RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
-                    .fill(Ink.accent)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
-                            .fill(.black.opacity(configuration.isPressed ? 0.18 : (hovered ? 0.08 : 0)))
-                    }
+                // Glass carries the accent as a tint, so the only thing left
+                // to draw is the press, which has to stay visible through it.
+                controlShape.fill(
+                    Liquid.isAvailable
+                        ? Color.black.opacity(configuration.isPressed ? 0.14 : 0)
+                        : Ink.accent
+                )
+                if !Liquid.isAvailable {
+                    controlShape.fill(.black.opacity(configuration.isPressed ? 0.18 : (hovered ? 0.08 : 0)))
+                }
             }
+            .liquid(in: controlShape, tint: Ink.accent)
+            .litByPointer(radius: controlRadius)
             .opacity(isEnabled ? 1 : 0.4)
             .pressable(configuration.isPressed)
             .onHover { hovered = $0 }
@@ -34,7 +51,7 @@ struct ActionStyle: ButtonStyle {
 }
 
 /// Everything else you can press. No fill at rest — on one material, a border
-/// is enough to say "this is a control".
+/// is enough to say "this is a control", and on glass the material says it.
 struct QuietStyle: ButtonStyle {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.isEnabled) private var isEnabled
@@ -45,16 +62,19 @@ struct QuietStyle: ButtonStyle {
         configuration.label
             .type(Face.row)
             .foregroundStyle(destructive ? Ink.critical : Ink.primary)
-            .padding(.horizontal, Space.m)
+            .padding(.horizontal, Liquid.isAvailable ? Space.l : Space.m)
             .frame(height: 32)
-            .contentShape(RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+            .contentShape(controlShape)
             .background {
-                RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+                controlShape
                     .fill(Ink.wash(scheme, configuration.isPressed ? Ink.Wash.pressed : (hovered ? Ink.Wash.hover : 0)))
             }
+            .liquid(in: controlShape)
             .overlay {
-                RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
-                    .strokeBorder(Ink.ruleStrong, lineWidth: 1)
+                if !Liquid.isAvailable {
+                    RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+                        .strokeBorder(Ink.ruleStrong, lineWidth: 1)
+                }
             }
             .opacity(isEnabled ? 1 : 0.4)
             .pressable(configuration.isPressed)

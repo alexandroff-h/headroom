@@ -16,11 +16,29 @@ sdk=$(otool -l "$BINARY" | awk '/LC_BUILD_VERSION/{f=1} f&&/[^n]sdk/{print $2; e
 plist=$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$PLIST" 2>/dev/null || echo "missing")
 
 printf 'Mach-O minimum   %s\n' "$minos"
-printf 'Built against    macOS %s SDK\n' "$sdk"
+printf 'SDK stamped      %s\n' "$sdk"
 printf 'Info.plist says  %s\n' "$plist"
 
 [[ "$minos" == "$EXPECTED" ]] || { echo "FAIL: Mach-O minimum is $minos, expected $EXPECTED"; status=1; }
 [[ "$plist" == "$EXPECTED" ]] || { echo "FAIL: Info.plist minimum is $plist, expected $EXPECTED"; status=1; }
+
+# The stamped SDK is not decoration. AppKit reads it to decide which era of
+# controls to draw, so a binary stamped with the deployment target gets macOS
+# 14 controls on macOS 26 — no Liquid Glass, no matter what the source says,
+# and nothing in the build output mentions it. That shipped once already.
+# SwiftPM stamps the deployment target by default; build-app.sh overrides it.
+if [[ "${sdk%%.*}" -lt 26 ]]; then
+    printf '\nNote: stamped macOS %s, so this build gets the pre-26 controls.\n' "$sdk"
+    printf '      Expected when building with the Command Line Tools SDK.\n'
+    if [[ "$sdk" == "$minos" ]]; then
+        echo "FAIL: SDK stamp equals the deployment target ($sdk)."
+        echo "      That is SwiftPM's default, not a real SDK version — the"
+        echo "      -platform_version override in build-app.sh is not landing."
+        status=1
+    fi
+else
+    printf '\nLiquid Glass: stamped macOS %s, so macOS 26+ draws the system materials.\n' "$sdk"
+fi
 
 # Weak-linked SwiftUI entry points are normal: Swift emits them with an
 # availability check and a fallback. They are listed so a new one gets noticed

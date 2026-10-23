@@ -96,10 +96,11 @@ struct QuitButton: View {
     }
 }
 
-/// The material. Light comes from above, so the fill is a touch lighter at the
-/// top and the highlight sits on the top arc only. The shadow is tinted with
-/// the fill's own hue rather than black, which is what keeps a coloured button
-/// from looking stuck onto the page.
+/// The material. On macOS 26 the system draws it: accent-tinted glass for the
+/// one filled button, clear glass for the rest, both lit by the pointer that
+/// is over them. Before 26 there is no glass to ask for, so the filled button
+/// falls back to a gradient — lighter at the top, because light comes from
+/// above — and the rest to a hairline border.
 private struct QuitButtonStyle: ButtonStyle {
     let filled: Bool
     let progress: Double?
@@ -107,7 +108,19 @@ private struct QuitButtonStyle: ButtonStyle {
     let hovered: Bool
     let scheme: ColorScheme
 
-    private var shape: RoundedRectangle {
+    /// macOS 26 rounds a control of this height to a capsule, and the tabs in
+    /// the toolbar above are already capsules. Before 26 the house radius is
+    /// the right answer, because every other control on screen uses it.
+    private var glass: Bool { Liquid.isAvailable }
+    private var radius: CGFloat { glass ? 16 : Radius.control }
+    private var shape: AnyShape {
+        glass ? AnyShape(Capsule()) : AnyShape(fallbackShape)
+    }
+
+    /// `strokeBorder` insets the line inward so a 1pt border never straddles
+    /// the edge, and it needs the concrete shape — `AnyShape` erases down to
+    /// `Shape`, which cannot inset. Only the fallback strokes anything.
+    private var fallbackShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
     }
 
@@ -119,26 +132,30 @@ private struct QuitButtonStyle: ButtonStyle {
             .foregroundStyle(filled ? Ink.onAccent : (dimmed ? Ink.tertiary : Ink.primary))
             // Optical padding: the label is the only thing in the box, so the
             // box is symmetric, but a pressed button loses a little air.
-            .padding(.horizontal, Space.m)
+            .padding(.horizontal, glass ? Space.l : Space.m)
             .frame(height: 32)
+            // Behind the label but in front of the glass, so the material
+            // still reads through everything drawn here.
             .background {
                 ZStack {
-                    if filled {
-                        shape.fill(
-                            LinearGradient(
-                                colors: [
-                                    Ink.accent.opacity(1).lighter(by: hovered ? 0.11 : 0.07),
-                                    Ink.accent,
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
+                    if !glass {
+                        if filled {
+                            shape.fill(
+                                LinearGradient(
+                                    colors: [
+                                        Ink.accent.lighter(by: hovered ? 0.11 : 0.07),
+                                        Ink.accent,
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
                             )
-                        )
-                        // Press darkens the whole face rather than moving it,
-                        // so the label never drifts under the pointer.
-                        shape.fill(.black.opacity(down ? 0.16 : 0))
-                    } else {
-                        shape.fill(Ink.wash(scheme, down ? Ink.Wash.pressed : (hovered ? Ink.Wash.hover : 0)))
+                            // Press darkens the whole face rather than moving
+                            // it, so the label never drifts under the pointer.
+                            shape.fill(.black.opacity(down ? 0.16 : 0))
+                        } else {
+                            shape.fill(Ink.wash(scheme, down ? Ink.Wash.pressed : (hovered ? Ink.Wash.hover : 0)))
+                        }
                     }
 
                     // The settle window, swept across the face. This is the
@@ -151,34 +168,46 @@ private struct QuitButtonStyle: ButtonStyle {
                                 .frame(width: proxy.size.width * progress)
                                 .animation(.linear(duration: 1), value: progress)
                         }
+                        // And a beam over it, because a fill creeping across
+                        // twelve seconds cannot say "still working" on its own.
+                        Beam()
                     }
                 }
                 .clipShape(shape)
             }
+            .liquid(in: shape, tint: filled ? Ink.accent : nil)
+            // The filled button only: see the note on litByPointer. The clear
+            // one is already lit by the material it is made of.
+            .litByPointer(radius: radius, enabled: filled)
             .overlay {
-                if filled {
-                    // Light from above: a bright top arc fading out by the
-                    // midpoint, never a full outline.
-                    shape.strokeBorder(
-                        LinearGradient(
-                            stops: [
-                                .init(color: .white.opacity(down ? 0.12 : 0.34), location: 0),
-                                .init(color: .white.opacity(0), location: 0.55),
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        ),
-                        lineWidth: 1
-                    )
-                } else {
-                    shape.strokeBorder(dimmed ? Ink.rule : Ink.ruleStrong, lineWidth: 1)
+                // Glass draws its own edge and its own specular. Only the
+                // fallback has to build one.
+                if !glass {
+                    if filled {
+                        // Light from above: a bright top arc fading out by the
+                        // midpoint, never a full outline.
+                        fallbackShape.strokeBorder(
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .white.opacity(down ? 0.12 : 0.34), location: 0),
+                                    .init(color: .white.opacity(0), location: 0.55),
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            ),
+                            lineWidth: 1
+                        )
+                    } else {
+                        fallbackShape.strokeBorder(dimmed ? Ink.rule : Ink.ruleStrong, lineWidth: 1)
+                    }
                 }
             }
             // Tinted with the fill's own hue, never black, and kept tight:
             // a wide soft coloured shadow stops reading as contact and starts
-            // reading as a glow.
+            // reading as a glow. Glass carries its own depth, so this is the
+            // fallback's job only.
             .modifier(ContactShadow(
-                active: filled,
+                active: filled && !glass,
                 color: Ink.accent.opacity(down ? 0.08 : (hovered ? 0.22 : 0.15)),
                 radius: down ? 2 : (hovered ? 6 : 4),
                 offset: down ? 1 : (hovered ? 3 : 2)
@@ -199,9 +228,8 @@ extension Color {
     }
 }
 
-
-/// Only the filled button is lifted off the page, so only the filled button
-/// pays for an offscreen pass.
+/// Only the filled fallback is lifted off the page, so only it pays for an
+/// offscreen pass.
 private struct ContactShadow: ViewModifier {
     let active: Bool
     let color: Color

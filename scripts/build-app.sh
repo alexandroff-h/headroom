@@ -11,15 +11,46 @@ cd "$PROJECT_ROOT"
 if [[ -z "${DEVELOPER_DIR:-}" && -d /Applications/Xcode-beta.app/Contents/Developer ]]; then
     export DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer
 fi
+SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version 2>/dev/null)"
 printf 'Toolchain: %s (macOS %s SDK)\n' \
     "$(xcrun swift --version 2>/dev/null | head -1 | sed -E 's/.*Apple Swift version ([0-9.]+).*/Swift \1/')" \
-    "$(xcrun --sdk macosx --show-sdk-version 2>/dev/null)"
+    "$SDK_VERSION"
+
+# AppKit decides which era of controls to draw from the SDK version recorded in
+# the binary, not from the OS running it — that is how Apple ships an
+# appearance change without redrawing every app already in the field. Build an
+# app against the macOS 14 SDK and macOS 26 will keep serving it macOS 14
+# controls forever, Liquid Glass included.
+#
+# SwiftPM records the *deployment target* as the SDK version, so Headroom was
+# shipping `minos 14.0 / sdk 14.0` and opting itself out of the system
+# materials it is supposed to inherit. Every other Mac app links the newest SDK
+# and deploys back; this says the same thing in the one dialect ld still
+# accepts (`-sdk_version` is obsolete). check-compat.sh asserts both halves.
+BUILD_FLAGS=(
+    -c release
+    --disable-sandbox
+    --cache-path /private/tmp/headroom-package-cache
+    -Xlinker -platform_version -Xlinker macos -Xlinker 14.0 -Xlinker "$SDK_VERSION"
+)
+
+# `glassEffect` is a macOS 26 SDK symbol, and @available cannot conjure a
+# symbol the compiler never saw. An older SDK — the Command Line Tools ship
+# one — still builds a working app; it builds the pre-26 half of every control
+# and nothing else. The runtime check stays in the source regardless, because
+# this binary deploys to macOS 14.
+if [[ "${SDK_VERSION%%.*}" -ge 26 ]]; then
+    BUILD_FLAGS+=(-Xswiftc -DLIQUID_GLASS)
+    printf 'Liquid Glass: compiled in (macOS 26+ at runtime)\n'
+else
+    printf 'Liquid Glass: not in this SDK, building the pre-26 controls only\n'
+fi
 
 export CLANG_MODULE_CACHE_PATH="$PROJECT_ROOT/.build/module-cache"
 mkdir -p "$CLANG_MODULE_CACHE_PATH"
-xcrun swift build -c release --disable-sandbox --cache-path /private/tmp/headroom-package-cache
+xcrun swift build "${BUILD_FLAGS[@]}"
 
-BINARY_DIRECTORY="$(xcrun swift build -c release --disable-sandbox --cache-path /private/tmp/headroom-package-cache --show-bin-path)"
+BINARY_DIRECTORY="$(xcrun swift build "${BUILD_FLAGS[@]}" --show-bin-path)"
 APP_DIRECTORY="$PROJECT_ROOT/dist/Headroom.app"
 mkdir -p "$APP_DIRECTORY/Contents/MacOS" "$APP_DIRECTORY/Contents/Resources"
 cp "$BINARY_DIRECTORY/Headroom" "$APP_DIRECTORY/Contents/MacOS/Headroom"

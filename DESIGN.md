@@ -66,6 +66,30 @@ Reduce Motion drops to a 0.12 s crossfade rather than to nothing: a change with 
 
 The list only commits a new order every four seconds, and never while the pointer is inside it. A row that moves out from under the cursor cannot be clicked.
 
+### Light
+
+Glass has a highlight, and a highlight has a source. On the one filled button the specular is
+pinned to the pointer: move across it and the light moves with you, the way it would if you
+tilted the thing in your hand. Tracking is instant — the light is cast by the pointer, it is not
+chasing it — and only the fade in and out is timed, at 160ms.
+
+It is on the filled button and nowhere else. Over a near-white capsule additive white has nothing
+left to brighten: it clips, and the pool of light becomes a grubby square patch with the
+gradient's own frame showing at the edges. That was rendered and looked at before it was ruled
+out. The glass material's own `interactive()` highlight already covers those controls.
+
+A **beam** crosses the button while a measurement is settling. The determinate fill underneath
+says how far along it is; the beam says it is still moving, which a fill creeping across a
+twelve-second window cannot say on its own. It is the only looping animation in the app, it lives
+for at most twelve seconds at a time, and Reduce Motion removes it and leaves the fill.
+
+What the beam is made of depends on what it crosses. On a dark ground it is light, added
+(`plusLighter`, white at 0.28). On a near-white ground there is nothing to add, so it is the
+accent hue laid over the surface instead (normal blend, 0.32). Both values were chosen by
+rendering the alternatives side by side rather than by taste: white-on-white at every strength
+read as a pale smear you could not track, and white at 0.45 on dark washed out the label it
+passed under.
+
 ## Cost
 
 A tool about wasted processor time may not waste it. Headroom samples every two seconds and holds **≈2% of one core** while doing so. Two measured fixes got it there from ≈29%:
@@ -91,13 +115,25 @@ The project board is **Headroom — performance you can act on**. Disk utilities
 
 ## Deployment
 
-Headroom deploys to **macOS 14 and later**, and there is not a single `#available` gate in the
-source. That is on purpose: the deployment target makes the compiler reject anything newer, so
-availability is enforced at build time rather than guarded at runtime.
+Headroom deploys to **macOS 14 and later**. Almost nothing in the source is version-gated,
+because the deployment target makes the compiler reject anything newer — availability is enforced
+at build time rather than guarded at runtime. Liquid Glass is the one exception, and it is gated
+three times. Two of those are in `Design/Glass.swift`; the third is not in the source at all.
 
-The SDK you build against only changes what the system draws for you. The tabs are a native
-segmented picker in the window toolbar, which macOS 26 renders as Liquid Glass and earlier
-versions render as a plain segmented control. Both are correct.
+**The SDK stamp is a design decision, not build trivia.** AppKit reads the SDK version recorded in
+the Mach-O header to decide which era of controls to draw — that is how Apple changes an
+appearance without redrawing every app already in the field. SwiftPM stamps the *deployment
+target* there, so Headroom shipped `minos 14.0 / sdk 14.0` and was handed macOS 14 controls on
+macOS 26: a flat grey segmented picker, no glass, nothing in the build output mentioning it. The
+code was right the whole time. `build-app.sh` now passes `-platform_version macos 14.0 <sdk>` so
+the binary says what every other Mac app says — newest SDK, oldest deployment target — and
+`check-compat.sh` fails if the stamp ever equals the deployment target again.
+
+The compile-time gate is the other half. `glassEffect` exists only in the macOS 26 SDK, and
+`@available` cannot conjure a symbol the compiler never saw, so an older SDK would not build at
+all. `build-app.sh` defines `LIQUID_GLASS` only when the SDK it found can see the API; without it
+every control compiles its pre-26 half and nothing else. The Command Line Tools still build a
+working app.
 
 The hazard that version is *not* the compiler's job, and was audited separately:
 
@@ -116,5 +152,6 @@ The hazard that version is *not* the compiler's job, and was audited separately:
   `/System/Library/CoreServices/CoreGlyphs.bundle/Contents/Resources/name_availability.plist`.
   The newest is `gauge.with.dots.needle.50percent` at macOS 14.0.
 
-`scripts/check-compat.sh` asserts the Mach-O minimum and the Info.plist minimum, and prints every
-weak-linked SwiftUI entry point so a new one is traced rather than assumed safe.
+`scripts/check-compat.sh` asserts the Mach-O minimum, the Info.plist minimum and the SDK stamp,
+and prints every weak-linked SwiftUI entry point so a new one is traced rather than assumed safe.
+The five `Glass` symbols appear there, each behind `if #available(macOS 26.0, *)`.

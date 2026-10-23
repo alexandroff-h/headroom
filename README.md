@@ -33,6 +33,12 @@ open dist/Headroom.app
 
 That produces a locally-signed `dist/Headroom.app`. It is not notarized, so it is for running from your own machine rather than for distribution.
 
+On **macOS 26 and later** the tabs, the toolbar button and every button in the app are drawn in
+Liquid Glass by the system. That needs the macOS 26 SDK or newer at build time — the Command Line
+Tools ship an older one, which builds a perfectly good app with the pre-26 controls instead. The
+build prints which one you got, and `scripts/check-compat.sh` says so too. Either way the app
+still runs on macOS 14.
+
 Move it to `/Applications` if you want it to stick around:
 
 ```sh
