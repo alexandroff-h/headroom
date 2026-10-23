@@ -21,12 +21,15 @@ private var controlShape: AnyShape {
 struct ActionStyle: ButtonStyle {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.isEnabled) private var isEnabled
+    /// See QuitButtonStyle: tinted glass greys out in a background window, and
+    /// a white label on grey glass cannot be read.
+    @Environment(\.controlActiveState) private var windowFocus
     @State private var hovered = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .type(Face.row)
-            .foregroundStyle(Ink.onAccent)
+            .foregroundStyle(Liquid.isAvailable && windowFocus == .inactive ? Ink.primary : Ink.onAccent)
             .padding(.horizontal, Liquid.isAvailable ? Space.l : Space.m)
             .frame(height: 32)
             .contentShape(controlShape)

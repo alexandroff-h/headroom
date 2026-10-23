@@ -108,6 +108,13 @@ private struct QuitButtonStyle: ButtonStyle {
     let hovered: Bool
     let scheme: ColorScheme
 
+    /// Glass takes its tint from the window's focus: in a background window
+    /// the accent desaturates to grey, and a white label on it is unreadable.
+    /// AppKit's own default button swaps to dark text rather than keeping a
+    /// label nobody can read, so this does too. The fallback's fill is painted
+    /// by hand and does not desaturate, so it keeps its white.
+    @Environment(\.controlActiveState) private var windowFocus
+
     /// macOS 26 rounds a control of this height to a capsule, and the tabs in
     /// the toolbar above are already capsules. Before 26 the house radius is
     /// the right answer, because every other control on screen uses it.
@@ -124,12 +131,18 @@ private struct QuitButtonStyle: ButtonStyle {
         RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
     }
 
+    private var labelInk: Color {
+        guard filled else { return dimmed ? Ink.tertiary : Ink.primary }
+        if glass && windowFocus == .inactive { return Ink.primary }
+        return Ink.onAccent
+    }
+
     func makeBody(configuration: Configuration) -> some View {
         let down = configuration.isPressed
 
         configuration.label
             .type(Face.row)
-            .foregroundStyle(filled ? Ink.onAccent : (dimmed ? Ink.tertiary : Ink.primary))
+            .foregroundStyle(labelInk)
             // Optical padding: the label is the only thing in the box, so the
             // box is symmetric, but a pressed button loses a little air.
             .padding(.horizontal, glass ? Space.l : Space.m)
